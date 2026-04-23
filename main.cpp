@@ -182,6 +182,7 @@ int main(int argc, char* argv[]) {
 						)
 					) {
 					std::string full_path = entry.path().string();
+					std::cout << "Indexing " << full_path << std::endl;
 					std::string doc_path = fs::relative(entry.path(), path).string();
 					std::string documentation = extract_documentation(full_path);
 					TFSorted tf_sorted = generate_tf(documentation);
