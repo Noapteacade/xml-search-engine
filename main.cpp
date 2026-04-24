@@ -21,6 +21,10 @@ using TF = std::unordered_map<std::string, uint64_t>;
 using TFSorted = std::vector<std::pair<std::string, uint64_t>>;
 using TFIndex = std::unordered_map<std::string, TFSorted>;
 
+static std::string extract_documentation(const std::string& file_path);
+static TFSorted generate_tf(const std::string& content);
+static void dump_index(const TFIndex& index, const std::string& filename);
+static std::optional<TFIndex> load_index(const std::string& filename);
 class Lexer {
 	std::string_view content;
 	void trim_left() {
@@ -66,6 +70,66 @@ public:
 		}
 		return chop_left(1);
 		// TODO;
+	}
+};
+class SubcommandHandler {
+public:
+	static int index(int argc, char* argv[]) {
+		if (argc < 3) {
+			std::cerr << "ERROR: Path argument is required for index subcommand" << std::endl;
+			return 1;
+		}
+		fs::path path = fs::absolute(argv[2]);
+		TFIndex index;
+		for (const auto& entry : fs::recursive_directory_iterator(path)) {
+			if (entry.is_regular_file() &&
+				(
+					entry.path().extension() == ".xml" ||
+					entry.path().extension() == ".xhtml"
+					)
+				) {
+				std::string full_path = entry.path().string();
+				std::cout << "Indexing " << full_path << std::endl;
+				std::string doc_path = fs::relative(entry.path(), path).string();
+				std::string documentation = extract_documentation(full_path);
+				TFSorted tf_sorted = generate_tf(documentation);
+				index[doc_path] = std::move(tf_sorted);
+			}
+		}
+		if (!fs::exists("index.files")) fs::create_directories("index-files");
+		index["!root"] = { std::make_pair(path.generic_string(), 0) };
+		dump_index(index, "index-files\\index_" + path.filename().string() + ".json");
+		return 0;
+	}
+	static int search(int argc, char* argv[]) {
+		if (argc < 4) {
+			std::cerr << "ERROR: Path argument and indexfile argument is required for subcommand `search`";
+			return 1;
+		}
+		std::string keyword = argv[2];
+		std::string file = argv[3];
+		fs::path indexfile = fs::absolute(file);
+		std::cout << "searching " << keyword << " in " << indexfile.generic_string() << std::endl;
+		Lexer lexer(keyword);
+		std::string token = " ";
+		TFIndex index;
+		auto index_opt = load_index(indexfile.generic_string());
+		if (!index_opt.has_value()) {
+			std::cerr << "ERROR: load index file failed: " << indexfile.generic_string() << std::endl;
+			return 1;
+		}
+		index = std::move(index_opt.value());
+		while (token != "") {
+			token = lexer.next_token();
+			std::transform(token.begin(), token.end(), token.begin(), ::tolower);
+			std::cout << token << std::endl;
+		}
+		return 0;
+	}
+	static void badcommand(int argc, char* argv[]) {
+		std::cerr << "ERROR: Unknown subcommand: " << argv[1] 
+			      << "\n     Vaild subcommand: `index` `search`" << std::endl;
+		exit(1);
 	}
 };
 static std::unordered_map<std::string, uint64_t> index(const std::string& str) {
@@ -136,15 +200,24 @@ static std::optional<TFIndex> load_index(const std::string& filename) {
 		if (!file.is_open()) return std::nullopt;
 		json j;
 		file >> j;
-
+		std::unordered_map<std::string, std::string> metadata;
 		if (j.empty()) return std::nullopt;
 
-		for (const auto& [doc_path, doc_json] : j.items()) {
+		for (auto& [doc_path, doc_json] : j.items()) {
+			std::string full_path = doc_path;
+			if (doc_path.rfind("!", 0) == 0) {
+				/*metadata, k-v pair syntax: "!<metadataname>": { "<metadatavalue>" : 0} */
+				metadata[doc_path.substr(1)] = doc_json.begin().key();
+				continue;
+			};
 			TFSorted tf_sorted;
 			for (const auto& [term, freq] : doc_json.items()) {
 				tf_sorted.emplace_back(term, freq.get<uint64_t>());
 			}
-			index[doc_path] = std::move(tf_sorted);
+			if (auto it = metadata.find("root"); it != metadata.end()) {
+				full_path = it->second + "/" + doc_path;
+			}
+			index[std::move(full_path)] = std::move(tf_sorted);
 		}
 
 		return index;
@@ -166,47 +239,8 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	std::string subcommand = argv[1];
-	if (subcommand == "index") {
-		if (argc < 3) {
-			std::cerr << "ERROR: Path argument is required for index subcommand" << std::endl;
-			return 1;
-		}
-		fs::path path = fs::absolute(argv[2]);
-		TFIndex index;
-		try {
-			for (const auto& entry : fs::recursive_directory_iterator(path)) {
-				if (entry.is_regular_file() && 
-					(
-						entry.path().extension() == ".xml" || 
-						entry.path().extension() == ".xhtml"
-						)
-					) {
-					std::string full_path = entry.path().string();
-					std::cout << "Indexing " << full_path << std::endl;
-					std::string doc_path = fs::relative(entry.path(), path).string();
-					std::string documentation = extract_documentation(full_path);
-					TFSorted tf_sorted = generate_tf(documentation);
-					index[doc_path] = std::move(tf_sorted);
-				}
-			}
-			if(!fs::exists("index.files")) fs::create_directories("index-files");
-			index["!root"] = { std::make_pair(path.generic_string(), 0)};
-			dump_index(index, "index-files\\index_" + path.filename().string() + ".json");
-		}
-		catch (const fs::filesystem_error& e) {
-			std::cerr << "ERROR: Filesystem error: " << e.what() << std::endl;
-			return 1;
-		}
-	}
-	else if (subcommand == "search") {
-		TODO;
-	}
-	else {
-		std::cerr << "ERROR: Unknown subcommand '"
-			<< subcommand
-			<< "'. Valid subcommands are 'index' and 'search'."
-			<< std::endl;
-		exit(1);
-	}
+	if (subcommand == "index") SubcommandHandler::index(argc, argv);
+	else if (subcommand == "search") SubcommandHandler::search(argc, argv);
+	else SubcommandHandler::badcommand(argc, argv);
 	return 0;
 }
