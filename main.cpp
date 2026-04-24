@@ -25,6 +25,8 @@ static std::string extract_documentation(const std::string& file_path);
 static TFSorted generate_tf(const std::string& content);
 static void dump_index(const TFIndex& index, const std::string& filename);
 static std::optional<TFIndex> load_index(const std::string& filename);
+static float tf(std::string term, TFSorted doc);
+
 class Lexer {
 	std::string_view content;
 	void trim_left() {
@@ -119,16 +121,33 @@ public:
 			return 1;
 		}
 		index = std::move(index_opt.value());
+		std::unordered_map<std::string, float> doc_score;
 		while (token != "") {
 			token = lexer.next_token();
 			std::transform(token.begin(), token.end(), token.begin(), ::tolower);
-			std::cout << token << std::endl;
+			for (auto& [path, table] : index)
+			{
+				const auto score_tf = tf(token, table);
+				const auto idf = 1;
+				const auto score = score_tf * idf;
+				if(score > 0) doc_score[path] += score;
+			}
+		}
+		std::vector<std::pair<std::string, float>> scores(doc_score.begin(), doc_score.end());
+		std::sort(scores.begin(), scores.end(),
+			[](const std::pair<std::string, float> a,
+				const std::pair<std::string, float> b) {
+					return a.second > b.second;
+			});
+		std::cout << "Search results for keyword: " << keyword << std::endl;
+		for (const auto& [path, score] : scores) {
+			std::cout << path << ": " << score << std::endl;
 		}
 		return 0;
 	}
 	static void badcommand(int argc, char* argv[]) {
-		std::cerr << "ERROR: Unknown subcommand: " << argv[1] 
-			      << "\n     Vaild subcommand: `index` `search`" << std::endl;
+		std::cerr << "ERROR: Unknown subcommand: " << argv[1]
+			<< "\n     Vaild subcommand: `index` `search`" << std::endl;
 		exit(1);
 	}
 };
@@ -170,6 +189,7 @@ static TFSorted generate_tf(const std::string& content) {
 	std::string token = lexer.next_token();
 	while (token != "") {
 		token = lexer.next_token();
+		if (token == "") continue;
 		std::transform(token.begin(), token.end(), token.begin(), ::tolower);
 		term_freq[token]++;
 	}
@@ -230,6 +250,24 @@ static std::optional<TFIndex> load_index(const std::string& filename) {
 		std::cerr << "ERROR: Unexpected error: " << e.what() << std::endl;
 		return std::nullopt;
 	}
+}
+static float tf(std::string term, TFSorted doc) {
+	const uint64_t sum = std::accumulate(doc.begin(),
+		doc.end(),
+		0ULL, [](uint64_t acc, const auto& pair) {
+			return acc + pair.second;
+		});
+	auto it = std::find_if(doc.begin(), doc.end(), [&term](const std::pair<std::string, uint64_t> p) {
+		return p.first == term;
+		});
+	// std::cout << "DEBUG: term=" << term << ", found=" << (it != doc.end()) << ", freq=" << (it != doc.end() ? it->second : 0) << std::endl;
+	if (it == doc.end()) {
+		return 0.0f;
+	}
+	return static_cast<float>(it->second) / sum;
+}
+static float idf() {
+
 }
 int main(int argc, char* argv[]) {
 	// argument syntax for subcommand `index`: index [path] => generate index.json
