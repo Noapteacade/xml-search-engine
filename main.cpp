@@ -24,8 +24,8 @@ using TFIndex = std::unordered_map<std::string, TFSorted>;
 
 static std::string extract_documentation(const std::string& file_path);
 static TFSorted generate_tf(const std::string& content);
-static void dump_index(const TFIndex& index, const std::string& filename);
-static std::optional<TFIndex> load_index(const std::string& filename);
+static void dump_index(const TFIndex& index, const fs::path& path);
+static bool load_index(TFIndex& index, const fs::path& path);
 static float tf(std::string term, const TFSorted& doc);
 static float idf(std::string term, const TFIndex& index);
 
@@ -121,12 +121,10 @@ public:
 		Lexer lexer(keyword);
 		std::string token = " ";
 		TFIndex index;
-		auto index_opt = load_index(indexfile.generic_string());
-		if (!index_opt.has_value()) {
+		if (!load_index(index, indexfile)) {
 			std::cerr << "ERROR: load index file failed: " << indexfile.generic_string() << std::endl;
 			return 1;
 		}
-		index = std::move(index_opt.value());
 		std::unordered_map<std::string, float> doc_score;
 		while (token != "") {
 			token = lexer.next_token();
@@ -211,7 +209,7 @@ static TFSorted generate_tf(const std::string& content) {
 		});
 	return sorted;
 }
-static void dump_index(const TFIndex& index, const std::string& filename) {
+static void dump_index(const TFIndex& index, const fs::path& path) {
 	json j;
 
 	for (const auto& [doc_path, tf_sorted] : index) {
@@ -222,18 +220,17 @@ static void dump_index(const TFIndex& index, const std::string& filename) {
 		j[doc_path] = doc_json;
 	}
 
-	std::ofstream file(filename);
+	std::ofstream file(path);
 	file << j.dump(4);
 }
-static std::optional<TFIndex> load_index(const std::string& filename) {
+static bool load_index(TFIndex& index, const fs::path& path) {
 	try {
-		TFIndex index;
-		std::ifstream file(filename);
-		if (!file.is_open()) return std::nullopt;
+		std::ifstream file(path);
+		if (!file.is_open()) return false;
 		json j;
 		file >> j;
 		std::unordered_map<std::string, std::string> metadata;
-		if (j.empty()) return std::nullopt;
+		if (j.empty()) return false;
 
 		for (auto& [doc_path, doc_json] : j.items()) {
 			std::string full_path = doc_path;
@@ -252,15 +249,15 @@ static std::optional<TFIndex> load_index(const std::string& filename) {
 			index[std::move(full_path)] = std::move(tf_sorted);
 		}
 
-		return index;
+		return true;
 	}
 	catch (const json::parse_error& e) {
 		std::cerr << "ERROR: JSON parse error: " << e.what() << std::endl;
-		return std::nullopt;
+		return false;
 	}
 	catch (const std::exception& e) {
 		std::cerr << "ERROR: Unexpected error: " << e.what() << std::endl;
-		return std::nullopt;
+		return false;
 	}
 }
 static float tf(std::string term, const TFSorted& doc) {
