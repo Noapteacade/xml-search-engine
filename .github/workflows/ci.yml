@@ -16,8 +16,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Clone vcpkg
-      run: git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+    - name: Clean and clone vcpkg
+      run: |
+        Remove-Item -Recurse -Force C:\vcpkg -ErrorAction SilentlyContinue
+        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
 
     - name: Install dependencies
       run: |
