@@ -9,8 +9,8 @@
 #include <cctype>
 #include <algorithm>
 #include <optional>
+#include <CLI\CLI.hpp>
 
-#include "commandline.hpp"
 #include "document.h"
 #include "aliases.h"
 #include "lexer.hpp"
@@ -19,22 +19,14 @@
 	<< " at " << __FILE__ << ":" << __LINE__ << std::endl; \
 	exit(1);
 
-
-//std::string extract_documentation(const std::string& file_path);
-//static Document generate_tf(const std::string& content);
-//static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path);
-//static bool load_index(TFIndex& index, const fs::path& path);
 static float tf(const std::string& term, const Document& doc);
 static float idf(const std::string& term, const TFIndex& index);
 
 
 class SubcommandHandler {
 public:
-	static int index(int argc, char* argv[]) {
-		commandline::Arguments args(argc, argv);
-		args.flag_position_argument(1, "directory");
-		args.parse();
-		fs::path path = fs::absolute(args["directory"].get_value());
+	static int index(const std::string& _path) {
+		fs::path path = fs::absolute(_path);
 		TFIndex index;
 		for (const auto& entry : fs::recursive_directory_iterator(path)) {
 			if (entry.is_regular_file() &&
@@ -57,19 +49,8 @@ public:
 		dump_index(index, metadata, "index-files\\index_" + path.filename().string() + ".json");
 		return 0;
 	}
-	static int search(int argc, char* argv[]) {
-		if (argc < 4) {
-			std::cerr << "ERROR: Path argument and indexfile argument is required for subcommand `search`";
-			return 1;
-		}
-		commandline::Arguments args(argc, argv);
-		args.flag_position_argument(1, "keyword");
-		args.flag_position_argument(2, "indexfile");
-		args.parse();
-		std::string keyword = args["keyword"].get_value();
-		std::string file = args["indexfile"].get_value();
-		std::string topN = args["top"].get_value();
-		fs::path indexfile = fs::absolute(file);
+	static int search(const std::string& keyword, const std::string& _index_file, size_t top_n) {
+		fs::path indexfile = fs::absolute(_index_file);
 		std::cout << "searching " << keyword << " in " << indexfile.generic_string() << std::endl;
 		Lexer lexer(keyword);
 		std::string token = " ";
@@ -102,14 +83,13 @@ public:
 		}
 		std::cout << "Best match: " << scores[0].first << std::endl;
 		std::cout << "Other matches: \n";
-		size_t top_n = (topN == "" ? scores.size() : stoi(topN));
 		for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
 			std::cout << "  " << scores[i].first << " (score: " << scores[i].second << ")\n";
 		}
 		return 0;
 	}
-	static void badcommand(int argc, char* argv[]) {
-		std::cerr << "ERROR: Unknown subcommand: " << argv[1]
+	static void badcommand(const std::string& subcommand) {
+		std::cerr << "ERROR: Unknown subcommand: " << subcommand
 			<< "\n     Vaild subcommand: `index` `search`" << std::endl;
 		exit(1);
 	}
@@ -129,20 +109,27 @@ static float idf(const std::string& term, const TFIndex& index) {
 	return static_cast<float>(std::log(1.0 * N / (1 + M)));
 }
 int main(int argc, char* argv[]) {
-	// argument syntax for subcommand `index`: index [path] => generate index.json
-	// argument syntax for subcommand `search`: todo
-	if (argc < 2) {
-		std::cerr << "Usage: " << argv[0] << " <subcommand> [args...]" << std::endl;
-		return 1;
+	CLI::App app{ "LocalSearchEngine" };
+	auto* index_cmd = app.add_subcommand("index", "Build index from directory");
+	std::string index_path;
+	index_cmd->add_option("directory", index_path, "Directory to index")->required();
+
+	auto* search_cmd = app.add_subcommand("search", "Search indexed documents");
+	std::string keyword;
+	std::string index_file;
+	int top_n = 10;
+	search_cmd->add_option("keyword", keyword, "Search keyword")->required();
+	search_cmd->add_option("indexfile", index_file, "Index file path")->required();
+	search_cmd->add_option("--top", top_n, "Number of results")->default_val(10);
+
+	CLI11_PARSE(app, argc, argv);
+
+	if (index_cmd->parsed()) {
+		SubcommandHandler::index(index_path);
 	}
-	std::string subcommand = argv[1];
-	try {
-		if (subcommand == "index") SubcommandHandler::index(argc, argv);
-		else if (subcommand == "search") SubcommandHandler::search(argc, argv);
-		else SubcommandHandler::badcommand(argc, argv);
+	else if (search_cmd->parsed()) {
+		SubcommandHandler::search(keyword, index_file, top_n);
 	}
-	catch (const std::exception& e) {
-		std::cerr << "ERROR " << e.what() << std::endl;
-	}
+
 	return 0;
 }
