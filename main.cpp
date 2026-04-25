@@ -81,11 +81,27 @@ public:
 			std::cout << "No results found for keyword: " << keyword << std::endl;
 			return 0;
 		}
-		std::cout << "Best match: " << scores[0].first << std::endl;
-		std::cout << "Other matches: \n";
-		for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
-			std::cout << "  " << scores[i].first << " (score: " << scores[i].second << ")\n";
+		std::cout << "Best match: " << fs::relative(scores[0].first).generic_string() << std::endl;
+		if (scores.size() > 1) {
+			std::cout << "Other matches: \n";
+			for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
+				std::cout << "  " << fs::relative(scores[i].first).generic_string() << " (score: " << scores[i].second << ")\n";
+			}
 		}
+		return 0;
+	}
+	static int contains(const std::string& _indexfile) {
+		fs::path indexfile = fs::absolute(_indexfile);
+		TFIndex index;
+		if (!load_index(index, indexfile)) {
+			std::cerr << "ERROR: load index file failed: " << indexfile.generic_string() << std::endl;
+			return 1;
+		}
+		uint64_t files = 0;
+		for (auto it = index.begin(); it != index.end(); it++) {
+			files++;
+		}
+		std::cout << "Index " << indexfile.generic_string() << " Contains " << files << " files";
 		return 0;
 	}
 	static void badcommand(const std::string& subcommand) {
@@ -122,6 +138,9 @@ int main(int argc, char* argv[]) {
 	search_cmd->add_option("indexfile", index_file, "Index file path")->required();
 	search_cmd->add_option("--top", top_n, "Number of results")->default_val(10);
 
+	auto* contains_cmd = app.add_subcommand("contains", "Count index file indexed files");
+	contains_cmd->add_option("indexfile", index_file, "Index file path")->required();
+
 	CLI11_PARSE(app, argc, argv);
 
 	if (index_cmd->parsed()) {
@@ -130,6 +149,8 @@ int main(int argc, char* argv[]) {
 	else if (search_cmd->parsed()) {
 		SubcommandHandler::search(keyword, index_file, top_n);
 	}
-
+	else if (contains_cmd->parsed()) {
+		SubcommandHandler::contains(index_file);
+	}
 	return 0;
 }
