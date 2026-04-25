@@ -145,6 +145,10 @@ public:
 				const std::pair<std::string, float> b) {
 					return a.second > b.second;
 			});
+		if (scores.empty()) {
+			std::cout << "No results found for keyword: " << keyword << std::endl;
+			return 0;
+		}
 		std::cout << "Best match: " << scores[0].first << std::endl;
 		std::cout << "Other matches: \n";
 		size_t top_n = (topN == "" ? scores.size() : stoi(topN));
