@@ -1,12 +1,11 @@
 # LocalSearchEngine
 
-一个基于 **TF‑IDF** 的轻量级本地搜索引擎，专为 **OpenGL 文档（docs.gl）** 设计，但也可用于任何**本地 XML / XHTML 文件集合**。
+一个基于 **TF‑IDF** 的轻量级本地搜索引擎，可用于任何**本地 XML / XHTML 文件集合**， 测试集仅包含OpenGL文档。
 
-- ✅ 纯 C++17 实现  
-- ✅ 依赖 vcpkg + CMake  
-- ✅ 支持 **生成索引** + **按 TF‑IDF 排序搜索**  
-- ✅ 命令行友好，提供 `--top N` 控制结果数量  
-- ✅ 自带 GitHub Actions CI，可自动编译验证
+- 纯 C++17 实现  
+- 依赖 vcpkg + CMake  
+- 支持 **生成索引** + **按 TF‑IDF 排序搜索**  
+- 命令行友好，提供 `--top N` 控制结果数量
 
 ---
 
@@ -117,21 +116,9 @@ LocalSearchEngine/
 ---
 
 ## 许可证
-
+MIT许可证
 该项目仅供学习 / 个人使用。  
 依赖库 `pugixml` 与 `nlohmann/json` 均为 MIT 许可证。  
 数据来源：[docs.gl](https://github.com/BSVino/docs.gl)
 
----
-
-## 下一步可扩展方向
-
-- [ ] 支持 `AND` / `OR` 查询语法  
-- [ ] 支持更多文档格式（JSON、Markdown、纯文本）  
-- [ ] 合并同文档的多条分数记录  
-- [ ] 缓存 `doc_freq` 以提高 IDF 速度  
-
----
-
 **Made with ❤️ and a lot of C++17**
-```
