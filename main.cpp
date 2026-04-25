@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <fstream>
 #include <optional>
+
 #include "commandline.hpp"
+#include "document.h"
 
 #define TODO std::cerr << "TODO: Not implemented yet" \
 	<< " at " << __FILE__ << ":" << __LINE__ << std::endl; \
@@ -20,14 +22,15 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 using TF = std::unordered_map<std::string, uint64_t>;
 using TFSorted = std::vector<std::pair<std::string, uint64_t>>;
-using TFIndex = std::unordered_map<std::string, TFSorted>;
+using TFIndex = std::unordered_map<std::string, Document>;
+using Metadata = std::unordered_map<std::string, std::string>;
 
 static std::string extract_documentation(const std::string& file_path);
-static TFSorted generate_tf(const std::string& content);
-static void dump_index(const TFIndex& index, const fs::path& path);
+static Document generate_tf(const std::string& content);
+static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path);
 static bool load_index(TFIndex& index, const fs::path& path);
-static float tf(std::string term, const TFSorted& doc);
-static float idf(std::string term, const TFIndex& index);
+static float tf(const std::string& term, const Document& doc);
+static float idf(const std::string& term, const TFIndex& index);
 
 class Lexer {
 	std::string_view content;
@@ -95,13 +98,14 @@ public:
 				std::cout << "Indexing " << full_path << std::endl;
 				std::string doc_path = fs::relative(entry.path(), path).string();
 				std::string documentation = extract_documentation(full_path);
-				TFSorted tf_sorted = generate_tf(documentation);
-				index[doc_path] = std::move(tf_sorted);
+				Document doc = generate_tf(documentation);
+				index[doc_path] = std::move(doc);
 			}
 		}
 		if (!fs::exists("index-files")) fs::create_directories("index-files");
-		index["!root"] = { std::make_pair(path.generic_string(), 0) };
-		dump_index(index, "index-files\\index_" + path.filename().string() + ".json");
+		Metadata metadata;
+		metadata["root"] = path.generic_string();
+		dump_index(index, metadata, "index-files\\index_" + path.filename().string() + ".json");
 		return 0;
 	}
 	static int search(int argc, char* argv[]) {
@@ -193,35 +197,38 @@ static std::string extract_documentation(const std::string& file_path) {
 	pugi::xml_node root = doc.document_element();
 	return enumerate(root);
 }
-static TFSorted generate_tf(const std::string& content) {
-	TF term_freq;
+static Document generate_tf(const std::string& content) {
+	Document doc;
 	Lexer lexer(content);
 	std::string token = lexer.next_token();
 	while (token != "") {
 		token = lexer.next_token();
 		if (token == "") continue;
 		std::transform(token.begin(), token.end(), token.begin(), ::tolower);
-		term_freq[token]++;
+		doc.freq[token]++;
+		doc.total_terms++;
 	}
-	auto sorted = std::vector<std::pair<std::string, uint64_t>>(term_freq.begin(), term_freq.end());
-	std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+	doc.sorted.assign(doc.freq.begin(), doc.freq.end());
+	std::sort(doc.sorted.begin(), doc.sorted.end(), [](const auto& a, const auto& b) {
 		return a.second > b.second;
 		});
-	return sorted;
+	return doc;
 }
-static void dump_index(const TFIndex& index, const fs::path& path) {
+static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path) {
 	json j;
-
-	for (const auto& [doc_path, tf_sorted] : index) {
+	for (const auto& [metadata_k, metadata_v] : metadata) {
+		j["!metadata"][metadata_k] = metadata_v;
+	}
+	for (const auto& [doc_path, doc] : index) {
 		json doc_json;
-		for (const auto& [term, freq] : tf_sorted) {
+		for (const auto& [term, freq] : doc.freq) {
 			doc_json[term] = freq;
 		}
 		j[doc_path] = doc_json;
 	}
 
 	std::ofstream file(path);
-	file << j.dump(4);
+	file << j.dump(2);
 }
 static bool load_index(TFIndex& index, const fs::path& path) {
 	try {
@@ -234,19 +241,21 @@ static bool load_index(TFIndex& index, const fs::path& path) {
 
 		for (auto& [doc_path, doc_json] : j.items()) {
 			std::string full_path = doc_path;
-			if (doc_path.rfind("!", 0) == 0) {
-				/*metadata, k-v pair syntax: "!<metadataname>": { "<metadatavalue>" : 0} */
-				metadata[doc_path.substr(1)] = doc_json.begin().key();
+			if (doc_path == "!metadata") {
+				for (auto& [key, value] : doc_json.items()) {
+					metadata[key] = value.get<std::string>();
+				}
 				continue;
 			};
-			TFSorted tf_sorted;
+			Document doc;
 			for (const auto& [term, freq] : doc_json.items()) {
-				tf_sorted.emplace_back(term, freq.get<uint64_t>());
+				doc.freq[term] = freq.get<uint64_t>();
+				doc.total_terms += freq.get<uint64_t>();
 			}
 			if (auto it = metadata.find("root"); it != metadata.end()) {
 				full_path = it->second + "/" + doc_path;
 			}
-			index[std::move(full_path)] = std::move(tf_sorted);
+			index[std::move(full_path)] = doc;
 		}
 
 		return true;
@@ -260,33 +269,16 @@ static bool load_index(TFIndex& index, const fs::path& path) {
 		return false;
 	}
 }
-static float tf(std::string term, const TFSorted& doc) {
-	const uint64_t sum = std::accumulate(doc.begin(),
-		doc.end(),
-		0ULL, [](uint64_t acc, const auto& pair) {
-			return acc + pair.second;
-		});
-	auto it = std::find_if(doc.begin(), doc.end(), [&term](const std::pair<std::string, uint64_t> p) {
-		return p.first == term;
-		});
-	// std::cout << "DEBUG: term=" << term << ", found=" << (it != doc.end()) << ", freq=" << (it != doc.end() ? it->second : 0) << std::endl;
-	if (it == doc.end()) {
-		return 0.0f;
-	}
-	return static_cast<float>(it->second) / sum;
+static float tf(const std::string& term, const Document& doc) {
+	auto it = doc.freq.find(term);
+	if (it == doc.freq.end()) return 0.0f;
+	return static_cast<float>(it->second) / doc.total_terms;
 }
-static float idf(std::string term, const TFIndex& index) {
+static float idf(const std::string& term, const TFIndex& index) {
 	const uint64_t N = index.size();
-	const uint64_t M = std::accumulate(index.begin(), index.end(),
-		0ULL,
-		[&term](uint64_t acc, const std::pair<const std::string, TFSorted>& p) {
-			bool document_has_term = std::find_if(
-				p.second.begin(),
-				p.second.end(),
-				[&term](const auto& kv) {
-					return kv.first == term;
-				}) != p.second.end();
-			return acc + document_has_term;
+	const uint64_t M = std::count_if(index.begin(), index.end(),
+		[&term](const auto& pair) {
+			return pair.second.freq.find(term) != pair.second.freq.end();
 		});
 	return std::log(1.0 * N / (1 + M));
 }
