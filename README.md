@@ -1,25 +1,25 @@
 # LocalSearchEngine
 
-一个基于 **TF‑IDF** 的轻量级本地搜索引擎，可用于任何**本地 XML / XHTML 文件集合**， 测试集仅包含OpenGL文档。
+A lightweight local search engine based on **TF‑IDF**, usable for any **local XML / XHTML file collection**. The test set currently only includes OpenGL documentation.
 
-- 纯 C++17 实现  
-- 依赖 vcpkg + CMake  
-- 支持 **生成索引** + **按 TF‑IDF 排序搜索**  
-- 命令行友好，提供 `--top N` 控制结果数量
+- Pure C++17 implementation  
+- Depends on vcpkg + CMake  
+- Supports **index generation** + **TF‑IDF ranked search**  
+- CLI‑friendly, with `--top N` to control result count
 
 ---
 
-## 效果预览
+## Preview
 
 ```bash
-# 生成索引
+# Generate index
 .\LocalSearchEngine.exe index ./docs.gl
 
-# 搜索（默认显示前 10）
+# Search (default top 10)
 .\LocalSearchEngine.exe search "buffer" ./index-files/index_gl4.json --top 10
 ```
 
-输出示例（搜 `"buffer"`）：
+Example output (searching `"buffer"`):
 
 ```text
 Best match: glBindBuffer.xhtml (score: 0.056)
@@ -31,60 +31,60 @@ Other matches:
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
 - Windows 10 / 11  
-- Visual Studio 2022（含 **C++ 桌面开发** 工作负载）  
-- [vcpkg](https://github.com/microsoft/vcpkg)（**推荐由 CMake 自动集成**）  
+- Visual Studio 2022 (with **Desktop development with C++** workload)  
+- [vcpkg](https://github.com/microsoft/vcpkg) (**recommended to be integrated automatically with CMake**)  
 - CMake 3.10+
 
-### 安装依赖 & 编译
+### Install Dependencies & Build
 
 ```bash
 git clone https://github.com/Noapteacade/xml-search-engine.git
 cd xml-search-engine
 
-# 1. 安装第三方库
+# 1. Install third-party libraries
 vcpkg install pugixml:x64-windows nlohmann-json:x64-windows
 
-# 2. 配置 & 编译
+# 2. Configure & build
 cmake -B build -DCMAKE_TOOLCHAIN_FILE="<vcpkg>/scripts/buildsystems/vcpkg.cmake"
 cmake --build build --config Release
 ```
 
-> `<vcpkg>` 是你本机 vcpkg 的实际路径，例如 `C:\vcpkg`。
+> `<vcpkg>` is the actual path to your local vcpkg installation, e.g. `C:\vcpkg`.
 
 ---
 
-## 使用说明
+## Usage
 
-### 1️⃣ 索引子命令
+### 1️⃣  Index subcommand
 
 ```bash
 LocalSearchEngine.exe index <path>
 ```
 
-- 递归遍历 `<path>`
-- 以 `.xml` / `.xhtml` 为目标文件
-- 生成 `index-files/index_<目录名>.json`
+- Recursively walks `<path>`
+- Targets `.xml` / `.xhtml` files
+- Generates `index-files/index_<dirname>.json`
 
-### 2️⃣ 搜索子命令
+### 2️⃣ Search subcommand
 
 ```bash
 LocalSearchEngine.exe search "<keyword>" <index-file> [--top N]
 ```
 
-参数说明：
+Arguments:
 
-| 参数        | 说明                         |
-|------------|------------------------------|
-| `keyword`  | 搜索词（支持多个空格分隔的词） |
-| `index-file` | JSON 索引文件路径             |
-| `--top N`  | 只显示前 N 条结果（默认全部）   |
+| Argument     | Description                                      |
+|--------------|--------------------------------------------------|
+| `keyword`    | Search term (multiple space‑separated words allowed) |
+| `index-file` | Path to the JSON index file                      |
+| `--top N`    | Show only top N results (default: all)          |
 
-示例：
+Example:
 
 ```bash
 LocalSearchEngine.exe search "glActiveShaderProgram" ./index-files/index_gl4.json --top 5
@@ -92,33 +92,41 @@ LocalSearchEngine.exe search "glActiveShaderProgram" ./index-files/index_gl4.jso
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```text
 LocalSearchEngine/
-├── build/                 # 临时编译目录（不进入 Git）
-├── index-files/           # 生成的索引文件（不进入 Git）
-├── commandline.hpp        # 自己的命令行参数解析器
-├── main.cpp               # 主程序（Lexer + TF‑IDF + 全流程）
-├── CMakeLists.txt         # CMake 构建配置
+├── build/                 # Temporary build directory (not in Git)
+├── index-files/           # Generated index files (not in Git)
+├── commandline.hpp        # Custom command line argument parser
+├── main.cpp               # Main program (Lexer + TF‑IDF + full pipeline)
+├── CMakeLists.txt         # CMake build configuration
 ├── .github/workflows/ci.yml   # GitHub Actions CI
 └── README.md
 ```
 
 ---
 
-## 已知限制
+## Roadmap
 
-- 仅支持 **ASCII 英文**，非 ASCII 字符会被 Lexer 直接跳过  
-- 索引仅存储 TF 向量，IDF 在搜索阶段实时计算（适合中小规模文档集）  
-- 目前仅针对 OpenGL 文档调优，但可扩展任意 XML 文档集合  
+- [ ] **Auto‑detect index files**: search across multiple indexes without user specifying path.
+- [ ] Global term‑to‑index metadata to speed up multi‑index search.
 
 ---
 
-## 许可证
-MIT许可证
-该项目仅供学习 / 个人使用。  
-依赖库 `pugixml` 与 `nlohmann/json` 均为 MIT 许可证。  
-数据来源：[docs.gl](https://github.com/BSVino/docs.gl)
+## Known Limitations
+
+- Index stores only TF vectors; IDF is computed at search time (suitable for small to medium document sets)  
+- Currently tuned for OpenGL documentation, but can be extended to arbitrary XML document collections  
+
+---
+
+## License
+
+MIT License
+
+This project is for learning / personal use only.  
+Dependencies `pugixml` and `nlohmann/json` are both MIT licensed.  
+Data source: [docs.gl](https://github.com/BSVino/docs.gl)
 
 **Made with ❤️ and a lot of C++17**
