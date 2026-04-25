@@ -21,6 +21,9 @@ jobs:
         Remove-Item -Recurse -Force C:\vcpkg -ErrorAction SilentlyContinue
         git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
 
+    - name: Bootstrap vcpkg
+      run: C:\vcpkg\bootstrap-vcpkg.bat
+
     - name: Install dependencies
       run: |
         C:\vcpkg\vcpkg.exe install pugixml:x64-windows
