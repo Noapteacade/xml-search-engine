@@ -23,8 +23,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        C:\vcpkg\vcpkg install pugixml:x64-windows
-        C:\vcpkg\vcpkg install nlohmann-json:x64-windows
+        C:\vcpkg\vcpkg.exe install pugixml:x64-windows
+        C:\vcpkg\vcpkg.exe install nlohmann-json:x64-windows
 
     - name: Configure CMake
       run: |
