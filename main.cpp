@@ -115,6 +115,7 @@ public:
 		args.parse();
 		std::string keyword = args["keyword"].get_value();
 		std::string file = args["indexfile"].get_value();
+		std::string topN = args["top"].get_value();
 		fs::path indexfile = fs::absolute(file);
 		std::cout << "searching " << keyword << " in " << indexfile.generic_string() << std::endl;
 		Lexer lexer(keyword);
@@ -146,7 +147,8 @@ public:
 			});
 		std::cout << "Best match: " << scores[0].first << std::endl;
 		std::cout << "Other matches: \n";
-		for (size_t i = 1; i < scores.size(); ++i) {
+		size_t top_n = std::stoi(topN);
+		for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
 			std::cout << "  " << scores[i].first << " (score: " << scores[i].second << ")\n";
 		}
 		return 0;
