@@ -25,7 +25,8 @@ static std::string extract_documentation(const std::string& file_path);
 static TFSorted generate_tf(const std::string& content);
 static void dump_index(const TFIndex& index, const std::string& filename);
 static std::optional<TFIndex> load_index(const std::string& filename);
-static float tf(std::string term, TFSorted doc);
+static float tf(std::string term, const TFSorted& doc);
+static float idf(std::string term, const TFIndex& index);
 
 class Lexer {
 	std::string_view content;
@@ -128,9 +129,9 @@ public:
 			for (auto& [path, table] : index)
 			{
 				const auto score_tf = tf(token, table);
-				const auto idf = 1;
-				const auto score = score_tf * idf;
-				if(score > 0) doc_score[path] += score;
+				const auto score_idf = idf(token, index);
+				const auto score = score_tf * score_idf;
+				if (score > 0) doc_score[path] += score;
 			}
 		}
 		std::vector<std::pair<std::string, float>> scores(doc_score.begin(), doc_score.end());
@@ -251,7 +252,7 @@ static std::optional<TFIndex> load_index(const std::string& filename) {
 		return std::nullopt;
 	}
 }
-static float tf(std::string term, TFSorted doc) {
+static float tf(std::string term, const TFSorted& doc) {
 	const uint64_t sum = std::accumulate(doc.begin(),
 		doc.end(),
 		0ULL, [](uint64_t acc, const auto& pair) {
@@ -266,8 +267,20 @@ static float tf(std::string term, TFSorted doc) {
 	}
 	return static_cast<float>(it->second) / sum;
 }
-static float idf() {
-
+static float idf(std::string term, const TFIndex& index) {
+	const uint64_t N = index.size();
+	const uint64_t M = std::accumulate(index.begin(), index.end(),
+		0ULL,
+		[&term](uint64_t acc, const std::pair<const std::string, TFSorted>& p) {
+			bool document_has_term = std::find_if(
+				p.second.begin(),
+				p.second.end(),
+				[&term](const auto& kv) {
+					return kv.first == term;
+				}) != p.second.end();
+			return acc + document_has_term;
+		});
+	return std::log(1.0 * N / (1 + M));
 }
 int main(int argc, char* argv[]) {
 	// argument syntax for subcommand `index`: index [path] => generate index.json
