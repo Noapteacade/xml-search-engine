@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <fstream>
 #include <optional>
+#include "commandline.hpp"
 
 #define TODO std::cerr << "TODO: Not implemented yet" \
 	<< " at " << __FILE__ << ":" << __LINE__ << std::endl; \
@@ -78,11 +79,10 @@ public:
 class SubcommandHandler {
 public:
 	static int index(int argc, char* argv[]) {
-		if (argc < 3) {
-			std::cerr << "ERROR: Path argument is required for index subcommand" << std::endl;
-			return 1;
-		}
-		fs::path path = fs::absolute(argv[2]);
+		commandline::Arguments args(argc, argv);
+		args.flag_position_argument(1, "directory");
+		args.parse();
+		fs::path path = fs::absolute(args["directory"].get_value());
 		TFIndex index;
 		for (const auto& entry : fs::recursive_directory_iterator(path)) {
 			if (entry.is_regular_file() &&
@@ -99,7 +99,7 @@ public:
 				index[doc_path] = std::move(tf_sorted);
 			}
 		}
-		if (!fs::exists("index.files")) fs::create_directories("index-files");
+		if (!fs::exists("index-files")) fs::create_directories("index-files");
 		index["!root"] = { std::make_pair(path.generic_string(), 0) };
 		dump_index(index, "index-files\\index_" + path.filename().string() + ".json");
 		return 0;
@@ -109,8 +109,12 @@ public:
 			std::cerr << "ERROR: Path argument and indexfile argument is required for subcommand `search`";
 			return 1;
 		}
-		std::string keyword = argv[2];
-		std::string file = argv[3];
+		commandline::Arguments args(argc, argv);
+		args.flag_position_argument(1, "keyword");
+		args.flag_position_argument(2, "indexfile");
+		args.parse();
+		std::string keyword = args["keyword"].get_value();
+		std::string file = args["indexfile"].get_value();
 		fs::path indexfile = fs::absolute(file);
 		std::cout << "searching " << keyword << " in " << indexfile.generic_string() << std::endl;
 		Lexer lexer(keyword);
@@ -140,9 +144,10 @@ public:
 				const std::pair<std::string, float> b) {
 					return a.second > b.second;
 			});
-		std::cout << "Search results for keyword: " << keyword << std::endl;
-		for (const auto& [path, score] : scores) {
-			std::cout << path << ": " << score << std::endl;
+		std::cout << "Best match: " << scores[0].first << std::endl;
+		std::cout << "Other matches: \n";
+		for (size_t i = 1; i < scores.size(); ++i) {
+			std::cout << "  " << scores[i].first << " (score: " << scores[i].second << ")\n";
 		}
 		return 0;
 	}
@@ -290,8 +295,13 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 	std::string subcommand = argv[1];
-	if (subcommand == "index") SubcommandHandler::index(argc, argv);
-	else if (subcommand == "search") SubcommandHandler::search(argc, argv);
-	else SubcommandHandler::badcommand(argc, argv);
+	try {
+		if (subcommand == "index") SubcommandHandler::index(argc, argv);
+		else if (subcommand == "search") SubcommandHandler::search(argc, argv);
+		else SubcommandHandler::badcommand(argc, argv);
+	}
+	catch (const std::exception& e) {
+		std::cerr << "ERROR " << e.what() << std::endl;
+	}
 	return 0;
 }
