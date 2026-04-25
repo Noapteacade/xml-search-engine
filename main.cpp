@@ -147,7 +147,7 @@ public:
 			});
 		std::cout << "Best match: " << scores[0].first << std::endl;
 		std::cout << "Other matches: \n";
-		size_t top_n = std::stoi(topN);
+		size_t top_n = (topN == "" ? scores.size() : stoi(topN));
 		for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
 			std::cout << "  " << scores[i].first << " (score: " << scores[i].second << ")\n";
 		}
