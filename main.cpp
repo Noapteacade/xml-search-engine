@@ -8,77 +8,26 @@
 #include <stdint.h>
 #include <cctype>
 #include <algorithm>
-#include <fstream>
 #include <optional>
 
 #include "commandline.hpp"
 #include "document.h"
-
+#include "aliases.h"
+#include "lexer.hpp"
+#include "indexer.h"
 #define TODO std::cerr << "TODO: Not implemented yet" \
 	<< " at " << __FILE__ << ":" << __LINE__ << std::endl; \
 	exit(1);
 
-namespace fs = std::filesystem;
-using json = nlohmann::json;
-using TF = std::unordered_map<std::string, uint64_t>;
-using TFSorted = std::vector<std::pair<std::string, uint64_t>>;
-using TFIndex = std::unordered_map<std::string, Document>;
-using Metadata = std::unordered_map<std::string, std::string>;
 
-static std::string extract_documentation(const std::string& file_path);
-static Document generate_tf(const std::string& content);
-static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path);
-static bool load_index(TFIndex& index, const fs::path& path);
+//std::string extract_documentation(const std::string& file_path);
+//static Document generate_tf(const std::string& content);
+//static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path);
+//static bool load_index(TFIndex& index, const fs::path& path);
 static float tf(const std::string& term, const Document& doc);
 static float idf(const std::string& term, const TFIndex& index);
 
-class Lexer {
-	std::string_view content;
-	void trim_left() {
-		while (!content.empty() && std::isspace(content.front())) {
-			content.remove_prefix(1);
-		}
-	}
-	std::string chop_left(size_t n) {
-		std::string token(content.substr(0, n));
-		content.remove_prefix(n);
-		return token;
-	}
-	template<typename Predicate>
-	std::string chop_while(Predicate pred, bool include_last = false) {
-		size_t n = 0;
-		while (n < content.size() && pred(content[n])) {
-			n++;
-		}
-		if (include_last && n < content.size()) n++;
-		return chop_left(n);
-	}
-public:
-	Lexer(const std::string& str) : content(str) {}
 
-	std::string next_token() {
-		trim_left();
-
-		if (content.empty()) return "";
-		if (!isascii(content.front())) {
-			chop_left(1);
-			return next_token();
-		}
-		if (content.substr(0, 2) == "{$") {
-			return chop_while([](char c) { return c != '}'; }, true);
-		}
-
-		if (std::isdigit(content.front())) {
-			return chop_while([](char c) { return std::isdigit(c) || c == '.'; });
-		}
-
-		if (std::isalpha(content.front())) {
-			return chop_while([](char c) { return std::isalnum(c) || c == '_'; });
-		}
-		return chop_left(1);
-		// TODO;
-	}
-};
 class SubcommandHandler {
 public:
 	static int index(int argc, char* argv[]) {
@@ -165,110 +114,7 @@ public:
 		exit(1);
 	}
 };
-static std::unordered_map<std::string, uint64_t> index(const std::string& str) {
-	TODO;
-}
-static std::string enumerate(pugi::xml_node node, int depth = 0) {
-	std::string documentation = "";
-	for (pugi::xml_node child : node.children()) {
-		if (child.type() == pugi::node_pcdata) {
-			std::string text = child.value();
-			if (!text.empty()) {
-				documentation += text;
-			}
-		}
-		std::string child_text = enumerate(child, depth + 1);
-		if (!child_text.empty()) {
-			if (!documentation.empty() && documentation.back() != '\n') {
-				documentation += ' ';
-			}
-			documentation += child_text;
-		}
-	}
-	return documentation;
-}
-static std::string extract_documentation(const std::string& file_path) {
-	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file(file_path.c_str());
-	if (!result) {
-		std::cerr << "ERROR: " << result.description() << " at " << result.offset << " bytes" << std::endl;
-		return "";
-	}
-	pugi::xml_node root = doc.document_element();
-	return enumerate(root);
-}
-static Document generate_tf(const std::string& content) {
-	Document doc;
-	Lexer lexer(content);
-	std::string token = lexer.next_token();
-	while (token != "") {
-		token = lexer.next_token();
-		if (token == "") continue;
-		std::transform(token.begin(), token.end(), token.begin(), ::tolower);
-		doc.freq[token]++;
-		doc.total_terms++;
-	}
-	doc.sorted.assign(doc.freq.begin(), doc.freq.end());
-	std::sort(doc.sorted.begin(), doc.sorted.end(), [](const auto& a, const auto& b) {
-		return a.second > b.second;
-		});
-	return doc;
-}
-static void dump_index(const TFIndex& index, const Metadata& metadata, const fs::path& path) {
-	json j;
-	for (const auto& [metadata_k, metadata_v] : metadata) {
-		j["!metadata"][metadata_k] = metadata_v;
-	}
-	for (const auto& [doc_path, doc] : index) {
-		json doc_json;
-		for (const auto& [term, freq] : doc.freq) {
-			doc_json[term] = freq;
-		}
-		j[doc_path] = doc_json;
-	}
 
-	std::ofstream file(path);
-	file << j.dump(2);
-}
-static bool load_index(TFIndex& index, const fs::path& path) {
-	try {
-		std::ifstream file(path);
-		if (!file.is_open()) return false;
-		json j;
-		file >> j;
-		std::unordered_map<std::string, std::string> metadata;
-		if (j.empty()) return false;
-
-		for (auto& [doc_path, doc_json] : j.items()) {
-			std::string full_path = doc_path;
-			if (doc_path == "!metadata") {
-				for (auto& [key, value] : doc_json.items()) {
-					metadata[key] = value.get<std::string>();
-				}
-				continue;
-			};
-			Document doc;
-			for (const auto& [term, freq] : doc_json.items()) {
-				doc.freq[term] = freq.get<uint64_t>();
-				doc.total_terms += freq.get<uint64_t>();
-			}
-			if (auto it = metadata.find("root"); it != metadata.end()) {
-				full_path = it->second + "/" + doc_path;
-			}
-			index[std::move(full_path)] = doc;
-		}
-
-		return true;
-	}
-	catch (const json::parse_error& e) {
-		std::cerr << "ERROR: JSON parse error: " << e.what() << std::endl;
-		return false;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "ERROR: Unexpected error: " << e.what() << std::endl;
-		return false;
-	}
-}
 static float tf(const std::string& term, const Document& doc) {
 	auto it = doc.freq.find(term);
 	if (it == doc.freq.end()) return 0.0f;
@@ -280,7 +126,7 @@ static float idf(const std::string& term, const TFIndex& index) {
 		[&term](const auto& pair) {
 			return pair.second.freq.find(term) != pair.second.freq.end();
 		});
-	return std::log(1.0 * N / (1 + M));
+	return static_cast<float>(std::log(1.0 * N / (1 + M)));
 }
 int main(int argc, char* argv[]) {
 	// argument syntax for subcommand `index`: index [path] => generate index.json
