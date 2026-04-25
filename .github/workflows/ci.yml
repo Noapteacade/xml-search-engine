@@ -28,6 +28,7 @@ jobs:
       run: |
         C:\vcpkg\vcpkg.exe install pugixml:x64-windows
         C:\vcpkg\vcpkg.exe install nlohmann-json:x64-windows
+        C:\vcpkg\vcpkg.exe install cli11:x64-windows
 
     - name: Configure CMake
       run: |
