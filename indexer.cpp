@@ -3,7 +3,6 @@
 #include <pugixml.hpp>
 #include <iostream>
 #include <fstream>
-
 std::string enumerate(pugi::xml_node node, int depth = 0) {
 	std::string documentation = "";
 	for (pugi::xml_node child : node.children()) {
@@ -25,7 +24,7 @@ std::string enumerate(pugi::xml_node node, int depth = 0) {
 }
 std::string extract_documentation(const std::string& file_path) {
 	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file(file_path.c_str());
+	pugi::xml_parse_result result = doc.load_file(file_path.c_str(), pugi::parse_default);
 	if (!result) {
 		std::cerr << "ERROR: " << result.description() << " at " << result.offset << " bytes" << std::endl;
 		return "";

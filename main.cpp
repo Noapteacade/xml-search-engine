@@ -9,6 +9,7 @@
 #include <cctype>
 #include <algorithm>
 #include <optional>
+#include <unordered_set>
 #include <CLI\CLI.hpp>
 
 #include "document.h"
@@ -24,29 +25,61 @@ static float idf(const std::string& term, const TFIndex& index);
 
 
 class SubcommandHandler {
+	static constexpr auto invered_index_file = "inverted_index.json";
 public:
 	static int index(const std::string& _path) {
 		fs::path path = fs::absolute(_path);
-		TFIndex index;
-		for (const auto& entry : fs::recursive_directory_iterator(path)) {
-			if (entry.is_regular_file() &&
-				(
-					entry.path().extension() == ".xml" ||
-					entry.path().extension() == ".xhtml"
-					)
-				) {
-				std::string full_path = entry.path().string();
-				std::cout << "Indexing " << full_path << std::endl;
-				std::string doc_path = fs::relative(entry.path(), path).string();
-				std::string documentation = extract_documentation(full_path);
-				Document doc = generate_tf(documentation);
-				index[doc_path] = std::move(doc);
-			}
-		}
 		if (!fs::exists("index-files")) fs::create_directories("index-files");
+		std::unordered_map<std::string, TFIndex> groups;
 		Metadata metadata;
 		metadata["root"] = path.generic_string();
-		dump_index(index, metadata, "index-files\\index_" + path.filename().string() + ".json");
+		for (const auto& entry : fs::recursive_directory_iterator(path)) {
+			if (!entry.is_regular_file() ||
+				!(
+					entry.path().extension() == ".xhtml" ||
+					entry.path().extension() == ".xml"
+					)
+				) {
+				std::cout << "WARN: cannot parse path: " << entry.path().generic_string() << ", skipped" << std::endl;
+				continue;
+			}
+			// 提取顶层子目录（相对于 path 的第一级）
+			auto relative = fs::relative(entry.path(), path);
+			std::string top_dir = relative.begin()->filename().string();
+
+			std::string full_path = entry.path().string();
+			std::cout << "Indexing " << full_path << std::endl;
+			std::string doc_path = relative.string();
+			groups[top_dir][doc_path] = generate_tf(extract_documentation(full_path));
+		}
+
+		fs::path inverted_index_path = fs::path("index-files") / invered_index_file;
+		// inverted index k-v syntax:
+		// "term": ["index file a", "index file b"]
+		// generate inverted index
+		std::string prefix = "index-files/index_";
+		std::unordered_map<std::string, std::unordered_set<std::string>> inverted_index;
+		for (const auto& [dir, idx] : groups) {
+			for (auto& [doc_path, doc] : idx) {
+				for (auto& [term, _] : doc.freq) {
+					inverted_index[term].insert(prefix + dir + ".json");
+				}
+			}
+		}
+		json inverted_index_json;
+		for (const auto& [term, files] : inverted_index) {
+			inverted_index_json[term] = files;
+		}
+		std::ofstream inverted_index_file(inverted_index_path);
+		if (!inverted_index_file.is_open()) {
+			std::cerr << "ERROR: cannot create inverted index file: " << inverted_index_path.generic_string() << std::endl;
+			return 1;
+		}
+		inverted_index_file << inverted_index_json.dump(2);
+
+		for (auto& [dir, idx] : groups) {
+			dump_index(idx, metadata, "index-files/index_" + dir + ".json");
+		}
 		return 0;
 	}
 	static int search(const std::string& keyword, const std::string& _index_file, size_t top_n) {
@@ -85,7 +118,13 @@ public:
 		if (scores.size() > 1) {
 			std::cout << "Other matches: \n";
 			for (size_t i = 1; i < std::min(scores.size(), top_n); ++i) {
-				std::cout << "  " << fs::relative(scores[i].first).generic_string() << " (score: " << scores[i].second << ")\n";
+				std::cout << "  " 
+					<< std::left << std::setw(60)
+					<< fs::relative(scores[i].first).generic_string() 
+					<< " (score: " << std::fixed 
+					<< std::setprecision(4) 
+					<< scores[i].second 
+					<< ")\n";
 			}
 		}
 		return 0;
