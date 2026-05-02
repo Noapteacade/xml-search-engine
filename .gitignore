@@ -1,0 +1,13 @@
+build/
+out/
+*.exe
+*.obj
+*.lib
+*.dll
+.vs/
+.vscode/
+index-files/*.json
+test.xml
+docs.gl/
+info.dat
+test_utf8
