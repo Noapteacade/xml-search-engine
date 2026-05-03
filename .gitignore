@@ -4,6 +4,7 @@ out/
 *.obj
 *.lib
 *.dll
+*.pdb
 .vs/
 .vscode/
 index-files/*.json

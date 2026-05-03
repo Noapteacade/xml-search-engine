@@ -209,6 +209,7 @@ public:
 				const std::pair<std::string, float> b) {
 					return a.second > b.second;
 			});
+
 		if (scores.empty()) {
 			std::cout << "No results found for keyword: " << keyword << std::endl;
 			return 0;

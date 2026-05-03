@@ -109,7 +109,7 @@ LocalSearchEngine/
 
 ## Roadmap
 
-- [ ] **Auto‑detect index files**: search across multiple indexes without user specifying path.
+- [ IMPLEMENTED ] **Auto‑detect index files**: search across multiple indexes without user specifying path.
 - [ ] Global term‑to‑index metadata to speed up multi‑index search.
 
 ---
@@ -118,6 +118,7 @@ LocalSearchEngine/
 
 - Index stores only TF vectors; IDF is computed at search time (suitable for small to medium document sets)  
 - Currently tuned for OpenGL documentation, but can be extended to arbitrary XML document collections  
+- If no index file is provided, the search results may include multiple matches with different scores but identical documents (same path).
 
 ---
 
