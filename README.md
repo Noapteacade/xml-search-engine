@@ -92,25 +92,12 @@ LocalSearchEngine.exe search "glActiveShaderProgram" ./index-files/index_gl4.jso
 
 ---
 
-## Project Structure
-
-```text
-LocalSearchEngine/
-├── build/                 # Temporary build directory (not in Git)
-├── index-files/           # Generated index files (not in Git)
-├── commandline.hpp        # Custom command line argument parser
-├── main.cpp               # Main program (Lexer + TF‑IDF + full pipeline)
-├── CMakeLists.txt         # CMake build configuration
-├── .github/workflows/ci.yml   # GitHub Actions CI
-└── README.md
-```
-
----
-
 ## Roadmap
 
 - [ IMPLEMENTED ] **Auto‑detect index files**: search across multiple indexes without user specifying path.
-- [ ] Global term‑to‑index metadata to speed up multi‑index search.
+- [ IMPLEMENTED ] Global term‑to‑index metadata to speed up multi‑index search.
+- Optimization search performance
+- Add Real-time Search
 
 ---
 
